@@ -1,0 +1,6 @@
+{
+  "name": "Intranet Mota & Advogados Associados",
+  "description": "Command Center e Intranet Corporativa da Mota & Advogados Associados integrada ao Google Workspace e Inteligência Artificial para gestão jurídica.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
