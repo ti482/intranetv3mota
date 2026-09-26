@@ -25,6 +25,7 @@ interface ITSupportCenterProps {
   currentUser: UserProfile;
   tickets: Ticket[];
   onAddTicket: (ticket: Ticket) => void;
+  onUpdateTicketStatus?: (ticketId: string, newStatus: Ticket['status'], solutionNotes?: string) => void;
   isOpenModal?: boolean;
   onCloseModal?: () => void;
 }
@@ -33,12 +34,17 @@ export const ITSupportCenter: React.FC<ITSupportCenterProps> = ({
   currentUser,
   tickets,
   onAddTicket,
+  onUpdateTicketStatus,
   isOpenModal,
   onCloseModal,
 }) => {
+  const isMasterAdmin = currentUser.email.toLowerCase() === 'ti@mota.adv.br';
   const [activeTab, setActiveTab] = useState<'tickets' | 'new_ticket' | 'wiki'>(isOpenModal ? 'new_ticket' : 'tickets');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [userFilter, setUserFilter] = useState<'all' | 'mine'>('all');
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [editStatus, setEditStatus] = useState<Ticket['status']>('Novo');
+  const [solutionInput, setSolutionInput] = useState<string>('');
 
   // Form states
   const [subject, setSubject] = useState('');
@@ -101,8 +107,9 @@ export const ITSupportCenter: React.FC<ITSupportCenterProps> = ({
   };
 
   const filteredTickets = tickets.filter(t => {
-    if (statusFilter === 'all') return true;
-    return t.status === statusFilter;
+    if (statusFilter !== 'all' && t.status !== statusFilter) return false;
+    if (userFilter === 'mine' && t.requesterEmail.toLowerCase() !== currentUser.email.toLowerCase()) return false;
+    return true;
   });
 
   return (
@@ -185,17 +192,46 @@ export const ITSupportCenter: React.FC<ITSupportCenterProps> = ({
       {activeTab === 'tickets' && (
         <div className="space-y-4">
           
-          {/* Status Filter Bar */}
-          <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
-            <div className="flex items-center gap-1.5">
-              <span className="text-slate-400 font-medium">Filtrar por Status:</span>
+          {/* Status & Scope Filter Bar */}
+          <div className="flex items-center justify-between flex-wrap gap-3 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* User Scope: Todos vs Meus Chamados */}
+              <div className="flex items-center bg-slate-950 p-0.5 rounded-xl border border-slate-800">
+                <button
+                  onClick={() => setUserFilter('all')}
+                  className={`px-3 py-1 rounded-lg font-medium transition-all ${
+                    userFilter === 'all'
+                      ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Todos ({tickets.length})
+                </button>
+                <button
+                  onClick={() => setUserFilter('mine')}
+                  className={`px-3 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
+                    userFilter === 'mine'
+                      ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>Meus Chamados</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-850 text-amber-300 font-mono">
+                    {tickets.filter(t => t.requesterEmail.toLowerCase() === currentUser.email.toLowerCase()).length}
+                  </span>
+                </button>
+              </div>
+
+              <div className="h-4 w-[1px] bg-slate-800 hidden sm:block" />
+
+              <span className="text-slate-400 font-medium">Status:</span>
               <button
                 onClick={() => setStatusFilter('all')}
                 className={`px-2.5 py-1 rounded-lg ${
                   statusFilter === 'all' ? 'bg-slate-700 text-white font-bold' : 'bg-slate-800/80 text-slate-400'
                 }`}
               >
-                Todos ({tickets.length})
+                Todos
               </button>
               <button
                 onClick={() => setStatusFilter('Novo')}
@@ -509,7 +545,7 @@ export const ITSupportCenter: React.FC<ITSupportCenterProps> = ({
         </div>
       )}
 
-      {/* Ticket Details Modal */}
+      {/* Ticket Details & Status Management Modal */}
       {selectedTicket && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-xl rounded-2xl shadow-2xl p-6 space-y-4">
@@ -518,6 +554,15 @@ export const ITSupportCenter: React.FC<ITSupportCenterProps> = ({
                 <span className="font-mono text-xs font-bold text-amber-400">{selectedTicket.protocol}</span>
                 <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-800 text-slate-300">
                   {selectedTicket.category}
+                </span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                  selectedTicket.status === 'Resolvido'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : selectedTicket.status === 'Em Análise'
+                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                }`}>
+                  {selectedTicket.status}
                 </span>
               </div>
               <button
@@ -528,26 +573,125 @@ export const ITSupportCenter: React.FC<ITSupportCenterProps> = ({
               </button>
             </div>
 
-            <h3 className="text-base font-bold text-white">
-              {selectedTicket.subject}
-            </h3>
-
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs text-slate-300 leading-relaxed">
-              {selectedTicket.description}
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-white">
+                {selectedTicket.subject}
+              </h3>
+              <div className="flex items-center gap-3 text-xs text-slate-400">
+                <span>Solicitante: <strong className="text-slate-200">{selectedTicket.requesterName}</strong> ({selectedTicket.requesterEmail})</span>
+                <span>•</span>
+                <span>Prioridade: <strong className="text-amber-400">{selectedTicket.priority}</strong></span>
+              </div>
             </div>
 
-            {selectedTicket.solutionNotes && (
-              <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-xl text-xs space-y-1">
-                <div className="font-bold text-emerald-400">Resolução Aplicada pela TI:</div>
-                <div className="text-emerald-200">{selectedTicket.solutionNotes}</div>
+            <div className="space-y-1.5">
+              <span className="text-xs font-semibold text-slate-400">Relato do Chamado:</span>
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs text-slate-300 leading-relaxed max-h-40 overflow-y-auto">
+                {selectedTicket.description}
+              </div>
+            </div>
+
+            {/* Apenas TI (ti@mota.adv.br) pode alterar status e adicionar notas de resolução */}
+            {isMasterAdmin ? (
+              <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5" />
+                    Controle de Atendimento (Exclusivo ti@mota.adv.br)
+                  </span>
+                  <span className="text-[10px] text-amber-400 font-mono">Permissão de Superadmin</span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs text-slate-300 font-medium">Atualizar Status de Atendimento:</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['Novo', 'Em Análise', 'Resolvido'] as Ticket['status'][]).map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => {
+                          setEditStatus(st);
+                          if (onUpdateTicketStatus && selectedTicket) {
+                            onUpdateTicketStatus(selectedTicket.id, st, solutionInput || selectedTicket.solutionNotes);
+                            setSelectedTicket(prev => prev ? { ...prev, status: st } : null);
+                          }
+                        }}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all ${
+                          selectedTicket.status === st
+                            ? st === 'Resolvido'
+                              ? 'bg-emerald-500 text-slate-950 shadow-md ring-2 ring-emerald-400'
+                              : st === 'Em Análise'
+                              ? 'bg-blue-500 text-white shadow-md ring-2 ring-blue-400'
+                              : 'bg-amber-500 text-slate-950 shadow-md ring-2 ring-amber-400'
+                            : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                        }`}
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs text-slate-300 font-medium">Parecer Técnico / Solução TI:</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={solutionInput || selectedTicket.solutionNotes || ''}
+                      onChange={(e) => setSolutionInput(e.target.value)}
+                      placeholder="Ex: PJeOffice reiniciado na porta 8800. Certificado A1 renovado."
+                      className="flex-1 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onUpdateTicketStatus && selectedTicket) {
+                          onUpdateTicketStatus(selectedTicket.id, selectedTicket.status, solutionInput);
+                          setSelectedTicket(prev => prev ? { ...prev, solutionNotes: solutionInput } : null);
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg transition-colors"
+                    >
+                      Salvar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Visualização para outros usuários (somente leitura do andamento) */
+              <div className="space-y-2">
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+                  <div className="text-xs font-semibold text-slate-400">Andamento do Atendimento:</div>
+                  <div className="text-xs text-slate-300">
+                    {selectedTicket.status === 'Resolvido' ? (
+                      <span className="text-emerald-400 font-semibold">✓ Chamado atendido e finalizado pelo Gestor de TI.</span>
+                    ) : selectedTicket.status === 'Em Análise' ? (
+                      <span className="text-blue-400 font-semibold">⏳ Chamado em triagem técnica por Carlos Eduardo (TI).</span>
+                    ) : (
+                      <span className="text-amber-400 font-semibold">⏱ Chamado registrado na fila de atendimento da TI.</span>
+                    )}
+                  </div>
+                </div>
+
+                {selectedTicket.solutionNotes && (
+                  <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-xl text-xs space-y-1">
+                    <div className="font-bold text-emerald-400">Parecer Técnico da TI:</div>
+                    <div className="text-emerald-200">{selectedTicket.solutionNotes}</div>
+                  </div>
+                )}
+                
+                <div className="p-2.5 bg-slate-950/60 rounded-lg border border-slate-800/80 text-[11px] text-slate-500 flex items-center justify-between">
+                  <span>Gerenciamento de status restrito:</span>
+                  <span className="font-mono text-amber-400">ti@mota.adv.br</span>
+                </div>
               </div>
             )}
 
             <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800">
-              <span>Atribuído a: <strong className="text-slate-200">{selectedTicket.assignedTo || 'Carlos Eduardo Siqueira'}</strong></span>
+              <span>Responsável Técnico: <strong className="text-slate-200">{selectedTicket.assignedTo || 'Carlos Eduardo Siqueira'}</strong></span>
               <button
                 onClick={() => setSelectedTicket(null)}
-                className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-semibold"
+                className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-semibold transition-colors"
               >
                 Fechar
               </button>

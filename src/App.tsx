@@ -26,6 +26,10 @@ import { InstitutionalMural } from './components/InstitutionalMural';
 import { FinancialModule } from './components/FinancialModule';
 import { CrmModule } from './components/CrmModule';
 import { AiAssistant } from './components/AiAssistant';
+import { AdminPanel } from './components/AdminPanel';
+import { LoginModal } from './components/LoginModal';
+import { ADMIN_EMAIL, determineRole, isDomainAuthorized } from './services/authService';
+import { DomainGatekeeper } from './components/DomainGatekeeper';
 import { 
   LayoutDashboard, 
   Search, 
@@ -39,12 +43,24 @@ import {
   Sparkles,
   Building2,
   Lock,
-  ChevronRight
+  ChevronRight,
+  ShieldCheck
 } from 'lucide-react';
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<UserProfile>(USERS[0]); // Default: Carlos Eduardo Siqueira
+  // Session Authentication: Starts with initial user or restored session
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem('mota_intranet_session_user');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      // fallback
+    }
+    return USERS[0]; // Carlos Eduardo (ti@mota.adv.br)
+  });
+  const [allUsers, setAllUsers] = useState<UserProfile[]>(USERS);
   const [activeTab, setActiveTab] = useState<string>('command_center');
+  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
 
   // Application State
   const [searchIndex, setSearchIndex] = useState<SearchableItem[]>(INITIAL_SEARCH_INDEX);
@@ -58,6 +74,54 @@ export default function App() {
   // Global Quick Action Modals
   const [openMeetingModal, setOpenMeetingModal] = useState(false);
   const [openTicketModal, setOpenTicketModal] = useState(false);
+
+  // Master Admin check
+  const isMasterAdmin = currentUser?.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
+  const handleCustomLogin = (email: string, name: string) => {
+    const existing = allUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+    let targetUser: UserProfile;
+    if (existing) {
+      targetUser = existing;
+    } else {
+      const { role, roleTitle } = determineRole(email);
+      targetUser = {
+        id: `user-${Date.now()}`,
+        name,
+        email,
+        role,
+        roleTitle,
+        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+        department: role === 'ti_admin' ? 'Tecnologia da Informação' : role === 'partner' ? 'Diretoria' : 'Núcleo Jurídico',
+      };
+      setAllUsers(prev => [targetUser, ...prev]);
+    }
+    setCurrentUser(targetUser);
+    try {
+      localStorage.setItem('mota_intranet_session_user', JSON.stringify(targetUser));
+    } catch (e) {}
+    setShowLoginModal(false);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    try {
+      localStorage.removeItem('mota_intranet_session_user');
+    } catch (e) {}
+  };
+
+  const handleUpdateUserRole = (userId: string, newRole: any) => {
+    setAllUsers(prev => prev.map(u => {
+      if (u.id === userId) {
+        let roleTitle = 'Analista Jurídico / Colaborador';
+        if (newRole === 'partner') roleTitle = 'Sócio da Banca';
+        if (newRole === 'senior_attorney') roleTitle = 'Advogado(a) Sênior';
+        if (newRole === 'ti_admin') roleTitle = 'Gestor de TI';
+        return { ...u, role: newRole, roleTitle };
+      }
+      return u;
+    }));
+  };
 
   // Keyboard shortcut Ctrl+K / Cmd+K to jump to Smart Search
   useEffect(() => {
@@ -73,7 +137,6 @@ export default function App() {
 
   const handleAddTicket = (newTicket: Ticket) => {
     setTickets(prev => [newTicket, ...prev]);
-    // Also index ticket in search index
     const searchItem: SearchableItem = {
       id: newTicket.id,
       title: `Chamado TI: ${newTicket.subject} (${newTicket.protocol})`,
@@ -87,6 +150,23 @@ export default function App() {
       tags: ['Chamado TI', newTicket.category, newTicket.priority, newTicket.status],
     };
     setSearchIndex(prev => [searchItem, ...prev]);
+  };
+
+  const handleUpdateTicketStatus = (ticketId: string, newStatus: Ticket['status'], solutionNotes?: string) => {
+    // Only ti@mota.adv.br has permission to update status
+    if (currentUser?.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) return;
+    
+    setTickets(prev => prev.map(t => {
+      if (t.id === ticketId) {
+        return {
+          ...t,
+          status: newStatus,
+          solutionNotes: solutionNotes !== undefined ? solutionNotes : t.solutionNotes,
+          updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        };
+      }
+      return t;
+    }));
   };
 
   const handleAddMeeting = (newMeeting: Meeting) => {
@@ -104,7 +184,17 @@ export default function App() {
     { id: 'finance', label: 'Financeiro', icon: Coins, badge: 'Restrito' },
     { id: 'crm', label: 'CRM Sindicatos', icon: Users, badge: null },
     { id: 'ai', label: 'Agente Jurídico IA', icon: Sparkles, badge: 'Gemini' },
+    // Only visible to the Master Admin (ti@mota.adv.br)
+    ...(isMasterAdmin ? [{ id: 'admin', label: 'Admin Geral (Você)', icon: ShieldCheck, badge: 'TI Master' }] : []),
   ];
+
+  if (!currentUser) {
+    return (
+      <DomainGatekeeper
+        onLoginSuccess={(email, name) => handleCustomLogin(email, name)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500/30">
@@ -112,9 +202,16 @@ export default function App() {
       {/* Top Header */}
       <Header
         currentUser={currentUser}
-        users={USERS}
-        onSelectUser={setCurrentUser}
+        users={allUsers}
+        onSelectUser={(u) => {
+          setCurrentUser(u);
+          try {
+            localStorage.setItem('mota_intranet_session_user', JSON.stringify(u));
+          } catch (e) {}
+        }}
         onOpenSearch={() => setActiveTab('search')}
+        onOpenLoginModal={() => setShowLoginModal(true)}
+        onLogout={handleLogout}
         onQuickAction={(action) => {
           if (action === 'meeting') {
             setActiveTab('meetings');
@@ -233,6 +330,7 @@ export default function App() {
               currentUser={currentUser}
               tickets={tickets}
               onAddTicket={handleAddTicket}
+              onUpdateTicketStatus={handleUpdateTicketStatus}
               isOpenModal={openTicketModal}
               onCloseModal={() => setOpenTicketModal(false)}
             />

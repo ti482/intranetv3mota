@@ -62,9 +62,17 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({
               </span>
             </div>
 
-            <h2 className="text-2xl sm:text-3xl font-serif font-bold text-white tracking-tight">
-              Olá, {currentUser.name}
-            </h2>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="text-2xl sm:text-3xl font-serif font-bold text-white tracking-tight">
+                Olá, {currentUser.name}
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-slate-800 border border-slate-700 text-amber-300">
+                {currentUser.email}
+              </span>
+              <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                {currentUser.roleTitle}
+              </span>
+            </div>
 
             <p className="text-sm text-slate-300 leading-relaxed">
               Bem-vindo ao portal corporativo da banca <strong className="text-amber-300">Mota &amp; Advogados Associados (OAB/DF 1413-A)</strong>, 

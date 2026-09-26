@@ -9,7 +9,8 @@ import {
   PlusCircle,
   HelpCircle,
   Calendar,
-  Lock
+  Lock,
+  LogOut
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -17,7 +18,9 @@ interface HeaderProps {
   users: UserProfile[];
   onSelectUser: (user: UserProfile) => void;
   onOpenSearch: () => void;
-  onQuickAction: (action: 'meeting' | 'ticket' | 'search' | 'ai') => void;
+  onOpenLoginModal: () => void;
+  onLogout?: () => void;
+  onQuickAction: (action: 'meeting' | 'ticket' | 'search' | 'ai' | 'admin') => void;
   activeTab: string;
 }
 
@@ -26,8 +29,11 @@ export const Header: React.FC<HeaderProps> = ({
   users,
   onSelectUser,
   onOpenSearch,
+  onOpenLoginModal,
+  onLogout,
   onQuickAction,
 }) => {
+  const isMasterAdmin = currentUser.email.toLowerCase() === 'ti@mota.adv.br';
   return (
     <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-slate-100 shadow-xl">
       {/* Top Banner with Corporate Identity */}
@@ -129,10 +135,16 @@ export const Header: React.FC<HeaderProps> = ({
                 
                 {/* User Switcher Dropdown */}
                 <div className="absolute right-0 mt-2 w-64 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl p-2 hidden group-hover:block hover:block z-50 animate-in fade-in slide-in-from-top-1">
-                  <div className="px-2 py-1.5 border-b border-slate-800 mb-1">
+                  <div className="px-2 py-1.5 border-b border-slate-800 mb-1 flex items-center justify-between">
                     <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
-                      Alternar Perfil Interno (SSO)
+                      Identidade Conectada
                     </p>
+                    <button
+                      onClick={onOpenLoginModal}
+                      className="text-[10px] text-amber-400 hover:text-amber-300 font-semibold"
+                    >
+                      Trocar Login
+                    </button>
                   </div>
                   {users.map((u) => (
                     <button
@@ -146,7 +158,14 @@ export const Header: React.FC<HeaderProps> = ({
                     >
                       <img src={u.avatar} alt={u.name} className="w-7 h-7 rounded-full object-cover" />
                       <div className="flex-1 truncate">
-                        <div className="font-semibold truncate">{u.name}</div>
+                        <div className="font-semibold truncate flex items-center gap-1">
+                          <span>{u.name}</span>
+                          {u.email === 'ti@mota.adv.br' && (
+                            <span className="px-1 py-0.2 rounded text-[9px] bg-rose-500/20 text-rose-300 font-mono">
+                              ADMIN
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[10px] text-slate-400 truncate">{u.roleTitle}</div>
                       </div>
                       {currentUser.id === u.id && (
@@ -154,9 +173,25 @@ export const Header: React.FC<HeaderProps> = ({
                       )}
                     </button>
                   ))}
-                  <div className="mt-2 pt-2 border-t border-slate-800 px-2 text-[10px] text-slate-400 flex items-center justify-between">
-                    <span>Google SSO Ativo</span>
-                    <span className="font-mono text-emerald-400">@mota.adv.br</span>
+                  <div className="mt-2 pt-2 border-t border-slate-800 px-2 space-y-1 text-[10px]">
+                    <div className="text-slate-400 flex items-center justify-between">
+                      <span>Google SSO Ativo</span>
+                      <span className="font-mono text-emerald-400">@mota.adv.br</span>
+                    </div>
+                    {isMasterAdmin && (
+                      <div className="text-rose-400 font-semibold">
+                        ★ Privilégio de Superadministrador TI Ativo
+                      </div>
+                    )}
+                    {onLogout && (
+                      <button
+                        onClick={onLogout}
+                        className="w-full mt-2 pt-2 border-t border-slate-800 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 text-xs font-semibold transition-colors"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Sair da Conta (Logout)</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
