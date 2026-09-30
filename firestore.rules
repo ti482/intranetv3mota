@@ -1,0 +1,152 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function userEmail() {
+      return request.auth.token.email;
+    }
+
+    function isDomainUser() {
+      return isVerified() && (
+        userEmail() == 'ti@mota.adv.br' ||
+        userEmail().matches('.*@mota[.]adv[.]br$')
+      );
+    }
+
+    function isTiAdmin() {
+      return isVerified() && userEmail() == 'ti@mota.adv.br';
+    }
+
+    // Connection testing endpoint for health check
+    match /test/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // User Profiles
+    match /users/{userId} {
+      allow get: if isDomainUser() && isValidId(userId);
+      allow list: if isDomainUser();
+      allow create: if isDomainUser() && isValidId(userId) && request.auth.uid == userId
+        && incoming().email is string && incoming().email.size() <= 100
+        && incoming().name is string && incoming().name.size() <= 200;
+      allow update: if isDomainUser() && isValidId(userId) && (
+        (request.auth.uid == userId && !incoming().diff(existing()).affectedKeys().hasAny(['role', 'email']))
+        || isTiAdmin()
+      );
+      allow delete: if isTiAdmin();
+    }
+
+    // IT Support Tickets
+    match /tickets/{ticketId} {
+      allow get: if isDomainUser() && isValidId(ticketId);
+      allow list: if isDomainUser();
+      allow create: if isDomainUser() && isValidId(ticketId)
+        && incoming().subject is string && incoming().subject.size() <= 300
+        && incoming().description is string && incoming().description.size() <= 5000
+        && incoming().requesterEmail is string && incoming().requesterEmail.size() <= 120
+        && incoming().priority is string && incoming().priority.size() <= 50
+        && incoming().status is string && incoming().status.size() <= 50
+        && (incoming().requesterEmail == userEmail() || isTiAdmin());
+      allow update: if isDomainUser() && isValidId(ticketId) && (
+        isTiAdmin() ||
+        (existing().requesterEmail == userEmail() && incoming().diff(existing()).affectedKeys().hasOnly(['description', 'subject', 'updatedAt']))
+      );
+      allow delete: if isTiAdmin();
+    }
+
+    // Google Meet / Meetings
+    match /meetings/{meetingId} {
+      allow get: if isDomainUser() && isValidId(meetingId);
+      allow list: if isDomainUser();
+      allow create: if isDomainUser() && isValidId(meetingId)
+        && incoming().title is string && incoming().title.size() <= 300
+        && incoming().type is string && incoming().type.size() <= 100
+        && incoming().date is string && incoming().date.size() <= 50;
+      allow update: if isDomainUser() && isValidId(meetingId);
+      allow delete: if isDomainUser() && isValidId(meetingId);
+    }
+
+    // Legal Documents & Drive Minutas
+    match /documents/{documentId} {
+      allow get: if isDomainUser() && isValidId(documentId);
+      allow list: if isDomainUser();
+      allow create: if isDomainUser() && isValidId(documentId)
+        && incoming().title is string && incoming().title.size() <= 300
+        && incoming().folder is string && incoming().folder.size() <= 200;
+      allow update: if isDomainUser() && isValidId(documentId);
+      allow delete: if isTiAdmin();
+    }
+
+    // Standard Operating Procedures (POPs)
+    match /pops/{popId} {
+      allow get: if isDomainUser() && isValidId(popId);
+      allow list: if isDomainUser();
+      allow create: if isDomainUser() && isValidId(popId)
+        && incoming().code is string && incoming().code.size() <= 50
+        && incoming().title is string && incoming().title.size() <= 300;
+      allow update: if isDomainUser() && isValidId(popId);
+      allow delete: if isTiAdmin();
+    }
+
+    // Institutional Mural & On-Call Notices
+    match /announcements/{announcementId} {
+      allow get: if isDomainUser() && isValidId(announcementId);
+      allow list: if isDomainUser();
+      allow create: if isDomainUser() && isValidId(announcementId)
+        && incoming().title is string && incoming().title.size() <= 300
+        && incoming().category is string && incoming().category.size() <= 100;
+      allow update: if isDomainUser() && isValidId(announcementId);
+      allow delete: if isTiAdmin();
+    }
+
+    // Precatórios Records
+    match /precatorios/{precatorioId} {
+      allow get: if isDomainUser() && isValidId(precatorioId);
+      allow list: if isDomainUser();
+      allow create: if isDomainUser() && isValidId(precatorioId)
+        && incoming().numero is string && incoming().numero.size() <= 100
+        && incoming().tribunal is string && incoming().tribunal.size() <= 100;
+      allow update: if isDomainUser() && isValidId(precatorioId);
+      allow delete: if isTiAdmin();
+    }
+
+    // CRM Sindicatos & Entidades
+    match /crm_entities/{entityId} {
+      allow get: if isDomainUser() && isValidId(entityId);
+      allow list: if isDomainUser();
+      allow create: if isDomainUser() && isValidId(entityId)
+        && incoming().nome is string && incoming().nome.size() <= 200
+        && incoming().sigla is string && incoming().sigla.size() <= 50;
+      allow update: if isDomainUser() && isValidId(entityId);
+      allow delete: if isTiAdmin();
+    }
+
+  }
+}

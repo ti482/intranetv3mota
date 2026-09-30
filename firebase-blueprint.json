@@ -1,0 +1,184 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Perfil de usuário corporativo autenticado via Google Workspace",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Google UID do usuário" },
+        "name": { "type": "string", "description": "Nome completo" },
+        "email": { "type": "string", "description": "E-mail corporativo @mota.adv.br ou ti@mota.adv.br" },
+        "role": { "type": "string", "enum": ["ti_admin", "partner", "senior_attorney", "trainee"], "description": "Cargo funcional" },
+        "roleTitle": { "type": "string", "description": "Título funcional do cargo" },
+        "department": { "type": "string", "description": "Departamento da banca" },
+        "avatar": { "type": "string", "description": "URL da foto do perfil Google" },
+        "oab": { "type": "string", "description": "Número de registro da OAB se aplicável" },
+        "lastLoginAt": { "type": "string", "description": "Timestamp ISO do último login" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "Ticket": {
+      "title": "Ticket",
+      "description": "Chamado de suporte de TI e infraestrutura da banca",
+      "type": "object",
+      "properties": {
+        "protocol": { "type": "string", "description": "Protocolo formatado do chamado" },
+        "requesterName": { "type": "string", "description": "Nome do solicitante" },
+        "requesterEmail": { "type": "string", "description": "E-mail do solicitante" },
+        "category": { "type": "string", "description": "Categoria do chamado (PJe, Certificado, etc)" },
+        "subject": { "type": "string", "description": "Assunto do chamado", "maxLength": 300 },
+        "description": { "type": "string", "description": "Descrição detalhada do problema", "maxLength": 5000 },
+        "priority": { "type": "string", "enum": ["Baixa", "Normal", "Média", "Alta", "Urgente"] },
+        "status": { "type": "string", "enum": ["Novo", "Pendente", "Em Análise", "Resolvido", "Cancelado"] },
+        "assignedTo": { "type": "string", "description": "Responsável pelo atendimento" },
+        "solutionNotes": { "type": "string", "description": "Notas da solução técnica", "maxLength": 3000 },
+        "createdAt": { "type": "string", "description": "Data de criação" },
+        "updatedAt": { "type": "string", "description": "Data da última atualização" }
+      },
+      "required": ["protocol", "requesterEmail", "subject", "description", "status", "priority", "createdAt"]
+    },
+    "Meeting": {
+      "title": "Meeting",
+      "description": "Audiência, sustentação oral ou reunião agendada",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Título da reunião ou audiência", "maxLength": 300 },
+        "type": { "type": "string", "description": "Tipo de evento (Audiência, Despacho, Assembleia)" },
+        "date": { "type": "string", "description": "Data YYYY-MM-DD" },
+        "startTime": { "type": "string", "description": "Hora de início HH:mm" },
+        "endTime": { "type": "string", "description": "Hora de término HH:mm" },
+        "tribunalOrOrg": { "type": "string", "description": "Tribunal ou órgão competente" },
+        "meetLink": { "type": "string", "description": "Link do Google Meet" },
+        "participants": { "type": "string", "description": "E-mails dos participantes separados por vírgula" },
+        "agenda": { "type": "string", "description": "Pauta da reunião" },
+        "status": { "type": "string", "enum": ["Agendada", "Em Andamento", "Realizada", "Cancelada"] },
+        "notifiedChat": { "type": "string", "description": "Indicador de notificação" },
+        "organizerEmail": { "type": "string", "description": "E-mail do organizador" },
+        "createdAt": { "type": "string", "description": "Data de criação" }
+      },
+      "required": ["title", "type", "date", "startTime", "status"]
+    },
+    "LegalDocument": {
+      "title": "LegalDocument",
+      "description": "Modelo de peça processual e arquivo do Google Drive",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Título da peça ou minuta" },
+        "folder": { "type": "string", "description": "Pasta de destino no Google Drive" },
+        "tribunal": { "type": "string", "description": "Tribunal competente (STF, STJ, TRF1)" },
+        "description": { "type": "string", "description": "Resumo da peça" },
+        "variables": { "type": "string", "description": "Campos customizáveis" },
+        "fullText": { "type": "string", "description": "Texto integral da minuta" },
+        "fileFormat": { "type": "string", "description": "Formato do arquivo (GDOC, DOCX, PDF)" },
+        "lastModified": { "type": "string", "description": "Data da última modificação" },
+        "driveUrl": { "type": "string", "description": "URL direta no Google Drive" }
+      },
+      "required": ["title", "folder", "tribunal", "description"]
+    },
+    "POPProcedure": {
+      "title": "POPProcedure",
+      "description": "Procedimento Operacional Padrão da banca",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "description": "Código do POP (ex: POP-JUR-01)" },
+        "title": { "type": "string", "description": "Título do procedimento" },
+        "category": { "type": "string", "description": "Categoria (Processual, Tecnologia, etc)" },
+        "version": { "type": "string", "description": "Versão homologada" },
+        "approvedBy": { "type": "string", "description": "Sócio ou gestor que aprovou" },
+        "effectiveDate": { "type": "string", "description": "Data de vigência" },
+        "criticalRules": { "type": "string", "description": "Regras críticas em JSON ou texto" },
+        "steps": { "type": "string", "description": "Etapas detalhadas em JSON ou texto" }
+      },
+      "required": ["code", "title", "category", "version"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Aviso do mural institucional e escala de plantão forense",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Título do aviso" },
+        "category": { "type": "string", "description": "Categoria (Plantão, Normativo, TI)" },
+        "summary": { "type": "string", "description": "Resumo do comunicado" },
+        "content": { "type": "string", "description": "Texto completo" },
+        "priority": { "type": "string", "enum": ["Alta", "Média", "Informativa"] },
+        "author": { "type": "string", "description": "Autor do comunicado" },
+        "authorEmail": { "type": "string", "description": "E-mail do autor" },
+        "date": { "type": "string", "description": "Data do comunicado" },
+        "link": { "type": "string", "description": "Link externo complementar" }
+      },
+      "required": ["title", "category", "content", "date", "priority"]
+    },
+    "PrecatorioRecord": {
+      "title": "PrecatorioRecord",
+      "description": "Precatório judicial ou RPV acompanhado pela banca",
+      "type": "object",
+      "properties": {
+        "numero": { "type": "string", "description": "Número do precatório" },
+        "processoOrigem": { "type": "string", "description": "Número do processo originário" },
+        "tribunal": { "type": "string", "description": "Tribunal expedidor" },
+        "entidadeDevedora": { "type": "string", "description": "Ente público devedor" },
+        "anoOrcamentario": { "type": "number", "description": "Ano do orçamento" },
+        "valorTotal": { "type": "number", "description": "Valor total da requisição" },
+        "honorariosBanca": { "type": "number", "description": "Valor dos honorários contratuais" },
+        "numeroBeneficiarios": { "type": "number", "description": "Número de servidores substituídos" },
+        "status": { "type": "string", "description": "Situação financeira do precatório" },
+        "dataPrevisao": { "type": "string", "description": "Previsão de pagamento" },
+        "sindicatoParceiro": { "type": "string", "description": "Sindicato parceiro" }
+      },
+      "required": ["numero", "tribunal", "entidadeDevedora", "anoOrcamentario", "valorTotal", "status"]
+    },
+    "CrmEntity": {
+      "title": "CrmEntity",
+      "description": "Entidade de classe ou sindicato conveniado",
+      "type": "object",
+      "properties": {
+        "nome": { "type": "string", "description": "Razão social da entidade" },
+        "sigla": { "type": "string", "description": "Sigla da entidade (CONDSEF, FENAJUFE)" },
+        "tipo": { "type": "string", "description": "Tipo (Sindicato, Federação, Associação)" },
+        "baseRepresentada": { "type": "string", "description": "Categoria profissional representada" },
+        "contatoPrincipal": { "type": "string", "description": "Nome do contato principal" },
+        "cargoContato": { "type": "string", "description": "Cargo do contato" },
+        "email": { "type": "string", "description": "E-mail de contato" },
+        "telefone": { "type": "string", "description": "Telefone de contato" },
+        "acoesAtivas": { "type": "number", "description": "Quantidade de ações ativas" },
+        "totalSubstituidos": { "type": "number", "description": "Número de associados atendidos" },
+        "proximaAssembleia": { "type": "string", "description": "Data da próxima assembleia" }
+      },
+      "required": ["nome", "sigla", "tipo", "contatoPrincipal", "email"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Perfis de usuários autorizados no domínio corporativo"
+    },
+    "/tickets/{ticketId}": {
+      "schema": "Ticket",
+      "description": "Chamados de suporte técnico de TI"
+    },
+    "/meetings/{meetingId}": {
+      "schema": "Meeting",
+      "description": "Reuniões e audiências judiciais da banca"
+    },
+    "/documents/{documentId}": {
+      "schema": "LegalDocument",
+      "description": "Hub de peças processuais e minutas"
+    },
+    "/pops/{popId}": {
+      "schema": "POPProcedure",
+      "description": "Procedimentos Operacionais Padrão (POPs)"
+    },
+    "/announcements/{announcementId}": {
+      "schema": "Announcement",
+      "description": "Mural institucional e escala de plantão forense"
+    },
+    "/precatorios/{precatorioId}": {
+      "schema": "PrecatorioRecord",
+      "description": "Acompanhamento orçamentário de precatórios e RPVs"
+    },
+    "/crm_entities/{entityId}": {
+      "schema": "CrmEntity",
+      "description": "Mapeamento de sindicatos e entidades de classe parceiras"
+    }
+  }
+}

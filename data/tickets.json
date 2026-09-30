@@ -1,0 +1,45 @@
+[
+  {
+    "id": "tk-1",
+    "protocol": "MOTA-TI-2026-091",
+    "requesterName": "Dra. Beatriz Alcântara Lima",
+    "requesterEmail": "beatriz.lima@mota.adv.br",
+    "category": "PJe/e-SAJ",
+    "subject": "Certidão de indisponibilidade não carrega no PJe TRF1",
+    "description": "Estou tentando assinar agravo de instrumento urgente e o assinador PJeOffice exibe erro de handshake TLS 1.3.",
+    "priority": "Urgente",
+    "status": "Em Análise",
+    "createdAt": "2026-09-25 09:30",
+    "updatedAt": "2026-09-25 09:45",
+    "assignedTo": "Carlos Eduardo Siqueira"
+  },
+  {
+    "id": "tk-2",
+    "protocol": "MOTA-TI-2026-092",
+    "requesterName": "Dr. Roberto Mota",
+    "requesterEmail": "roberto.mota@mota.adv.br",
+    "category": "Hardware/Rede",
+    "subject": "Solicitação de acesso VPN seguro para sustentação oral no STF",
+    "description": "Necessidade de túnel IP dedicado com prioridade QoS para transmissão em tempo real da sessão plenária do STF.",
+    "priority": "Alta",
+    "status": "Resolvido",
+    "solutionNotes": "Configurada rota direta com link de redundância de fibra e túnel IPSec prioritário. Testes realizados com latência de 4ms.",
+    "createdAt": "2026-09-24 14:15",
+    "updatedAt": "2026-09-24 16:30",
+    "assignedTo": "Carlos Eduardo Siqueira"
+  },
+  {
+    "id": "tk-3",
+    "protocol": "MOTA-TI-2026-093",
+    "requesterName": "Lucas Mendes Santana",
+    "requesterEmail": "lucas.santana@mota.adv.br",
+    "category": "Sistemas/Software",
+    "subject": "Falha de compilação de planilha de liquidação no PJe-Calc",
+    "description": "Ao rodar o cálculo de juros pela Selic na execução do tema 1.100, os índices de 2021 estão divergentes da tabela do CJF.",
+    "priority": "Média",
+    "status": "Pendente",
+    "createdAt": "2026-09-26 11:00",
+    "updatedAt": "2026-09-26 11:00",
+    "assignedTo": "Carlos Eduardo Siqueira"
+  }
+]

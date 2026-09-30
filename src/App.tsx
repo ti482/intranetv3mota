@@ -4,17 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { 
-  USERS, 
-  INITIAL_SEARCH_INDEX, 
-  INITIAL_TICKETS, 
-  INITIAL_MEETINGS, 
-  INITIAL_DOCUMENTS, 
-  INITIAL_POPS, 
-  INITIAL_PRECATARIOS, 
-  INITIAL_CRM 
-} from './data/initialData';
-import { UserProfile, Ticket, Meeting, SearchableItem } from './types';
+import { UserProfile, Ticket, Meeting, SearchableItem, LegalDocument, POPProcedure, PrecatorioRecord, CrmEntity } from './types';
 import { Header } from './components/Header';
 import { CommandCenter } from './components/CommandCenter';
 import { SmartSearch } from './components/SmartSearch';
@@ -28,8 +18,23 @@ import { CrmModule } from './components/CrmModule';
 import { AiAssistant } from './components/AiAssistant';
 import { AdminPanel } from './components/AdminPanel';
 import { LoginModal } from './components/LoginModal';
-import { ADMIN_EMAIL, determineRole, isDomainAuthorized } from './services/authService';
 import { DomainGatekeeper } from './components/DomainGatekeeper';
+import { ADMIN_EMAIL, logoutUser, syncUserProfile } from './services/authService';
+import { auth, onAuthStateChanged } from './services/firebase';
+import { 
+  seedFirestoreIfEmpty,
+  subscribeTickets,
+  subscribeMeetings,
+  subscribeDocuments,
+  subscribePops,
+  subscribePrecatorios,
+  subscribeCrmEntities,
+  subscribeUsers,
+  updateUserRole,
+  createTicket,
+  updateTicketStatus,
+  createMeeting
+} from './services/dataService';
 import { 
   LayoutDashboard, 
   Search, 
@@ -42,86 +47,137 @@ import {
   Users, 
   Sparkles,
   Building2,
-  Lock,
-  ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  RefreshCw
 } from 'lucide-react';
 
 export default function App() {
-  // Session Authentication: Starts with initial user or restored session
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
-    try {
-      const saved = localStorage.getItem('mota_intranet_session_user');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      // fallback
-    }
-    return USERS[0]; // Carlos Eduardo (ti@mota.adv.br)
-  });
-  const [allUsers, setAllUsers] = useState<UserProfile[]>(USERS);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<string>('command_center');
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
 
-  // Application State
-  const [searchIndex, setSearchIndex] = useState<SearchableItem[]>(INITIAL_SEARCH_INDEX);
-  const [tickets, setTickets] = useState<Ticket[]>(INITIAL_TICKETS);
-  const [meetings, setMeetings] = useState<Meeting[]>(INITIAL_MEETINGS);
-  const [precatorios, setPrecatorios] = useState(INITIAL_PRECATARIOS);
-  const [documents, setDocuments] = useState(INITIAL_DOCUMENTS);
-  const [pops, setPops] = useState(INITIAL_POPS);
-  const [crmEntities, setCrmEntities] = useState(INITIAL_CRM);
+  // Firestore Live State
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [documents, setDocuments] = useState<LegalDocument[]>([]);
+  const [pops, setPops] = useState<POPProcedure[]>([]);
+  const [precatorios, setPrecatorios] = useState<PrecatorioRecord[]>([]);
+  const [crmEntities, setCrmEntities] = useState<CrmEntity[]>([]);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
 
-  // Global Quick Action Modals
+  // Search Index derived from real Firestore documents
+  const [searchIndex, setSearchIndex] = useState<SearchableItem[]>([]);
+
+  // Modals
   const [openMeetingModal, setOpenMeetingModal] = useState(false);
   const [openTicketModal, setOpenTicketModal] = useState(false);
 
-  // Master Admin check
+  // Super Admin Check
   const isMasterAdmin = currentUser?.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
-  const handleCustomLogin = (email: string, name: string) => {
-    const existing = allUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
-    let targetUser: UserProfile;
-    if (existing) {
-      targetUser = existing;
-    } else {
-      const { role, roleTitle } = determineRole(email);
-      targetUser = {
-        id: `user-${Date.now()}`,
-        name,
-        email,
-        role,
-        roleTitle,
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-        department: role === 'ti_admin' ? 'Tecnologia da Informação' : role === 'partner' ? 'Diretoria' : 'Núcleo Jurídico',
-      };
-      setAllUsers(prev => [targetUser, ...prev]);
-    }
-    setCurrentUser(targetUser);
-    try {
-      localStorage.setItem('mota_intranet_session_user', JSON.stringify(targetUser));
-    } catch (e) {}
-    setShowLoginModal(false);
-  };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-    try {
-      localStorage.removeItem('mota_intranet_session_user');
-    } catch (e) {}
-  };
-
-  const handleUpdateUserRole = (userId: string, newRole: any) => {
-    setAllUsers(prev => prev.map(u => {
-      if (u.id === userId) {
-        let roleTitle = 'Analista Jurídico / Colaborador';
-        if (newRole === 'partner') roleTitle = 'Sócio da Banca';
-        if (newRole === 'senior_attorney') roleTitle = 'Advogado(a) Sênior';
-        if (newRole === 'ti_admin') roleTitle = 'Gestor de TI';
-        return { ...u, role: newRole, roleTitle };
+  // Listen to Firebase Auth state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const profile = await syncUserProfile(firebaseUser);
+          setCurrentUser(profile);
+        } catch (err) {
+          console.error('Domain authorization error:', err);
+          setCurrentUser(null);
+        }
+      } else {
+        setCurrentUser(null);
       }
-      return u;
-    }));
-  };
+      setIsAuthLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Listen to Firestore real-time collections when authenticated
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Seed baseline data on first run if database is clean
+    seedFirestoreIfEmpty();
+
+    const unsubTickets = subscribeTickets(setTickets);
+    const unsubMeetings = subscribeMeetings(setMeetings);
+    const unsubDocs = subscribeDocuments(setDocuments);
+    const unsubPops = subscribePops(setPops);
+    const unsubPrec = subscribePrecatorios(setPrecatorios);
+    const unsubCrm = subscribeCrmEntities(setCrmEntities);
+    const unsubUsers = subscribeUsers(setAllUsers);
+
+    return () => {
+      unsubTickets();
+      unsubMeetings();
+      unsubDocs();
+      unsubPops();
+      unsubPrec();
+      unsubCrm();
+      unsubUsers();
+    };
+  }, [currentUser]);
+
+  // Dynamically update Search Index from real Firestore entities
+  useEffect(() => {
+    const items: SearchableItem[] = [];
+
+    // Documents
+    documents.forEach(d => {
+      items.push({
+        id: d.id,
+        title: d.title,
+        source: 'google_docs',
+        category: 'peca_juridica',
+        tribunal: d.tribunal === 'Administrativo' ? 'Geral' : d.tribunal,
+        summary: d.description,
+        content: `${d.title} - ${d.folder}. ${d.fullText?.substring(0, 300) || d.description}`,
+        lastUpdated: d.lastModified || '2026-09-26',
+        author: 'Núcleo Jurídico',
+        externalUrl: d.driveUrl || 'https://drive.google.com',
+        tags: [d.tribunal, d.folder, 'Peça Jurídica', 'Drive'],
+      });
+    });
+
+    // POPs
+    pops.forEach(p => {
+      items.push({
+        id: p.id,
+        title: `${p.code}: ${p.title}`,
+        source: 'google_docs',
+        category: 'procedimento_pop',
+        tribunal: 'Geral',
+        summary: `Procedimento Operacional Padrão aprovado por ${p.approvedBy} (${p.category}).`,
+        content: `${p.code} - ${p.title}. Regras: ${p.criticalRules?.join(' ') || ''}`,
+        lastUpdated: p.effectiveDate || '2026-09-26',
+        author: p.approvedBy,
+        externalUrl: 'https://docs.google.com',
+        tags: ['POP', p.category, p.code, 'Normas Internas'],
+      });
+    });
+
+    // Tickets
+    tickets.forEach(t => {
+      items.push({
+        id: t.id,
+        title: `Chamado TI: ${t.subject} (${t.protocol})`,
+        source: 'google_forms',
+        category: 'chamado_ti',
+        summary: t.description,
+        content: `${t.subject} - Solicitante: ${t.requesterName}. ${t.description} - Solução: ${t.solutionNotes || ''}`,
+        lastUpdated: t.createdAt.split(' ')[0] || '2026-09-26',
+        author: t.requesterName,
+        externalUrl: 'https://docs.google.com/forms',
+        tags: ['TI', t.category, t.priority, t.status],
+      });
+    });
+
+    setSearchIndex(items);
+  }, [documents, pops, tickets]);
 
   // Keyboard shortcut Ctrl+K / Cmd+K to jump to Smart Search
   useEffect(() => {
@@ -135,42 +191,48 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const handleAddTicket = (newTicket: Ticket) => {
-    setTickets(prev => [newTicket, ...prev]);
-    const searchItem: SearchableItem = {
-      id: newTicket.id,
-      title: `Chamado TI: ${newTicket.subject} (${newTicket.protocol})`,
-      source: 'google_forms',
-      category: 'chamado_ti',
-      summary: newTicket.description,
-      content: `${newTicket.subject} - Solicitante: ${newTicket.requesterName}. ${newTicket.description}`,
-      lastUpdated: newTicket.createdAt.split(' ')[0],
-      author: newTicket.requesterName,
-      externalUrl: 'https://docs.google.com/forms/d/mota-ti',
-      tags: ['Chamado TI', newTicket.category, newTicket.priority, newTicket.status],
-    };
-    setSearchIndex(prev => [searchItem, ...prev]);
+  const handleLogout = async () => {
+    await logoutUser();
+    setCurrentUser(null);
   };
 
-  const handleUpdateTicketStatus = (ticketId: string, newStatus: Ticket['status'], solutionNotes?: string) => {
-    // Only ti@mota.adv.br has permission to update status
-    if (currentUser?.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) return;
-    
-    setTickets(prev => prev.map(t => {
-      if (t.id === ticketId) {
-        return {
-          ...t,
-          status: newStatus,
-          solutionNotes: solutionNotes !== undefined ? solutionNotes : t.solutionNotes,
-          updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-        };
-      }
-      return t;
-    }));
+  const handleAddTicket = async (newTicket: Ticket) => {
+    await createTicket({
+      protocol: newTicket.protocol,
+      requesterName: currentUser?.name || newTicket.requesterName,
+      requesterEmail: currentUser?.email || newTicket.requesterEmail,
+      category: newTicket.category,
+      subject: newTicket.subject,
+      description: newTicket.description,
+      priority: newTicket.priority,
+      status: 'Novo',
+      assignedTo: 'Carlos Eduardo Siqueira',
+      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+    });
   };
 
-  const handleAddMeeting = (newMeeting: Meeting) => {
-    setMeetings(prev => [newMeeting, ...prev]);
+  const handleUpdateTicketStatus = async (ticketId: string, newStatus: Ticket['status'], solutionNotes?: string) => {
+    if (currentUser?.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+      return;
+    }
+    await updateTicketStatus(ticketId, newStatus, solutionNotes);
+  };
+
+  const handleAddMeeting = async (newMeeting: Meeting) => {
+    await createMeeting({
+      title: newMeeting.title,
+      type: newMeeting.type,
+      date: newMeeting.date,
+      startTime: newMeeting.startTime,
+      endTime: newMeeting.endTime,
+      tribunalOrOrg: newMeeting.tribunalOrOrg,
+      meetLink: newMeeting.meetLink,
+      participants: newMeeting.participants || [currentUser?.email || 'ti@mota.adv.br'],
+      agenda: newMeeting.agenda,
+      status: 'Agendada',
+      notifiedChat: true,
+    });
   };
 
   const navItems = [
@@ -184,14 +246,28 @@ export default function App() {
     { id: 'finance', label: 'Financeiro', icon: Coins, badge: 'Restrito' },
     { id: 'crm', label: 'CRM Sindicatos', icon: Users, badge: null },
     { id: 'ai', label: 'Agente Jurídico IA', icon: Sparkles, badge: 'Gemini' },
-    // Only visible to the Master Admin (ti@mota.adv.br)
     ...(isMasterAdmin ? [{ id: 'admin', label: 'Admin Geral (Você)', icon: ShieldCheck, badge: 'TI Master' }] : []),
   ];
+
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-4">
+          <RefreshCw className="w-8 h-8 text-amber-500 animate-spin" />
+          <p className="text-xs text-slate-400 font-mono tracking-wider">
+            Validando sessão corporativa Google Workspace...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return (
       <DomainGatekeeper
-        onLoginSuccess={(email, name) => handleCustomLogin(email, name)}
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+        }}
       />
     );
   }
@@ -202,13 +278,8 @@ export default function App() {
       {/* Top Header */}
       <Header
         currentUser={currentUser}
-        users={allUsers}
-        onSelectUser={(u) => {
-          setCurrentUser(u);
-          try {
-            localStorage.setItem('mota_intranet_session_user', JSON.stringify(u));
-          } catch (e) {}
-        }}
+        users={[currentUser]}
+        onSelectUser={() => {}}
         onOpenSearch={() => setActiveTab('search')}
         onOpenLoginModal={() => setShowLoginModal(true)}
         onLogout={handleLogout}
@@ -231,7 +302,7 @@ export default function App() {
       {/* Main Container */}
       <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col lg:flex-row gap-6">
         
-        {/* Navigation Sidebar (Vertical on Desktop, horizontal scroll on Mobile) */}
+        {/* Navigation Sidebar */}
         <aside className="w-full lg:w-64 flex-shrink-0">
           <nav className="bg-slate-900 border border-slate-800 rounded-2xl p-2.5 shadow-xl flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible sticky top-24">
             
@@ -246,7 +317,7 @@ export default function App() {
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap lg:whitespace-normal group ${
+                  className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap lg:whitespace-normal group cursor-pointer ${
                     isActive
                       ? 'bg-amber-500 text-slate-950 font-bold shadow-md'
                       : 'text-slate-300 hover:bg-slate-800 hover:text-white'
@@ -283,8 +354,8 @@ export default function App() {
               <div className="text-[10px] text-slate-500 font-mono">
                 Domínio: @mota.adv.br
               </div>
-              <div className="text-[10px] text-slate-500">
-                Sede: Edifício Athenas, Brasília
+              <div className="text-[10px] text-slate-500 font-mono">
+                Banco: Firestore Ativo
               </div>
             </div>
 
@@ -359,9 +430,29 @@ export default function App() {
           {activeTab === 'ai' && (
             <AiAssistant currentUser={currentUser} />
           )}
+
+          {activeTab === 'admin' && isMasterAdmin && (
+            <AdminPanel
+              currentUser={currentUser}
+              allUsers={allUsers.length > 0 ? allUsers : [currentUser]}
+              onUpdateUserRole={async (userId, newRole) => {
+                await updateUserRole(userId, newRole);
+              }}
+            />
+          )}
         </main>
 
       </div>
+
+      {showLoginModal && (
+        <LoginModal
+          onLogin={(user) => {
+            setCurrentUser(user);
+            setShowLoginModal(false);
+          }}
+          onCancel={() => setShowLoginModal(false)}
+        />
+      )}
 
       {/* Footer */}
       <footer className="mt-auto border-t border-slate-800 bg-slate-950 py-4 text-xs text-slate-400">
@@ -378,7 +469,7 @@ export default function App() {
           <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400">
             <span>Gestor de TI: ti@mota.adv.br</span>
             <span>•</span>
-            <span className="text-amber-400">Google Workspace Native</span>
+            <span className="text-amber-400">Google Workspace &amp; Firebase</span>
           </div>
         </div>
       </footer>

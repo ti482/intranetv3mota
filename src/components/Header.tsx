@@ -146,47 +146,34 @@ export const Header: React.FC<HeaderProps> = ({
                       Trocar Login
                     </button>
                   </div>
-                  {users.map((u) => (
-                    <button
-                      key={u.id}
-                      onClick={() => onSelectUser(u)}
-                      className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-xs transition-colors ${
-                        currentUser.id === u.id
-                          ? 'bg-amber-500/20 text-amber-200 border border-amber-500/30'
-                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                      }`}
-                    >
-                      <img src={u.avatar} alt={u.name} className="w-7 h-7 rounded-full object-cover" />
-                      <div className="flex-1 truncate">
-                        <div className="font-semibold truncate flex items-center gap-1">
-                          <span>{u.name}</span>
-                          {u.email === 'ti@mota.adv.br' && (
-                            <span className="px-1 py-0.2 rounded text-[9px] bg-rose-500/20 text-rose-300 font-mono">
-                              ADMIN
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[10px] text-slate-400 truncate">{u.roleTitle}</div>
+                  <div className="p-2 space-y-2">
+                    <div className="flex items-center gap-3 p-2 bg-slate-950/60 rounded-lg border border-slate-800">
+                      <img src={currentUser.avatar} alt={currentUser.name} className="w-10 h-10 rounded-full object-cover ring-1 ring-amber-500/50" />
+                      <div className="overflow-hidden">
+                        <div className="font-semibold text-slate-100 text-xs truncate">{currentUser.name}</div>
+                        <div className="text-[11px] text-amber-400 font-mono truncate">{currentUser.email}</div>
+                        <div className="text-[10px] text-slate-400 truncate">{currentUser.roleTitle}</div>
                       </div>
-                      {currentUser.id === u.id && (
-                        <UserCheck className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                      )}
-                    </button>
-                  ))}
-                  <div className="mt-2 pt-2 border-t border-slate-800 px-2 space-y-1 text-[10px]">
+                    </div>
+                  </div>
+                  <div className="mt-1 pt-2 border-t border-slate-800 px-2 space-y-1.5 text-[10px]">
                     <div className="text-slate-400 flex items-center justify-between">
-                      <span>Google SSO Ativo</span>
-                      <span className="font-mono text-emerald-400">@mota.adv.br</span>
+                      <span>Domínio Autorizado:</span>
+                      <span className="font-mono text-emerald-400 font-bold">@mota.adv.br</span>
+                    </div>
+                    <div className="text-slate-400 flex items-center justify-between">
+                      <span>Departamento:</span>
+                      <span className="text-slate-200">{currentUser.department}</span>
                     </div>
                     {isMasterAdmin && (
-                      <div className="text-rose-400 font-semibold">
-                        ★ Privilégio de Superadministrador TI Ativo
+                      <div className="p-1.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-300 font-semibold text-center">
+                        ★ Superadministrador TI Master
                       </div>
                     )}
                     {onLogout && (
                       <button
                         onClick={onLogout}
-                        className="w-full mt-2 pt-2 border-t border-slate-800 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 text-xs font-semibold transition-colors"
+                        className="w-full mt-2 pt-2 border-t border-slate-800 flex items-center justify-center gap-1.5 py-2 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 text-xs font-semibold transition-colors"
                       >
                         <LogOut className="w-3.5 h-3.5" />
                         <span>Sair da Conta (Logout)</span>

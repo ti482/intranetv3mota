@@ -1,6 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 
@@ -13,6 +14,276 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '20mb' }));
+
+// ---------------------------------------------------------
+// Persistent Data Storage (Tickets & Audits)
+// ---------------------------------------------------------
+const DATA_DIR = path.resolve(__dirname, 'data');
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+const TICKETS_FILE = path.join(DATA_DIR, 'tickets.json');
+
+const SEED_TICKETS = [
+  {
+    id: 'tk-1',
+    protocol: 'MOTA-TI-2026-091',
+    requesterName: 'Dra. Beatriz Alcântara Lima',
+    requesterEmail: 'beatriz.lima@mota.adv.br',
+    category: 'PJe/e-SAJ',
+    subject: 'Certidão de indisponibilidade não carrega no PJe TRF1',
+    description: 'Estou tentando assinar agravo de instrumento urgente e o assinador PJeOffice exibe erro de handshake TLS 1.3.',
+    priority: 'Urgente',
+    status: 'Em Análise',
+    createdAt: '2026-09-25 09:30',
+    updatedAt: '2026-09-25 09:45',
+    assignedTo: 'Carlos Eduardo Siqueira',
+  },
+  {
+    id: 'tk-2',
+    protocol: 'MOTA-TI-2026-092',
+    requesterName: 'Dr. Roberto Mota',
+    requesterEmail: 'roberto.mota@mota.adv.br',
+    category: 'Hardware/Rede',
+    subject: 'Solicitação de acesso VPN seguro para sustentação oral no STF',
+    description: 'Necessidade de túnel IP dedicado com prioridade QoS para transmissão em tempo real da sessão plenária do STF.',
+    priority: 'Alta',
+    status: 'Resolvido',
+    solutionNotes: 'Configurada rota direta com link de redundância de fibra e túnel IPSec prioritário. Testes realizados com latência de 4ms.',
+    createdAt: '2026-09-24 14:15',
+    updatedAt: '2026-09-24 16:30',
+    assignedTo: 'Carlos Eduardo Siqueira',
+  },
+  {
+    id: 'tk-3',
+    protocol: 'MOTA-TI-2026-093',
+    requesterName: 'Lucas Mendes Santana',
+    requesterEmail: 'lucas.santana@mota.adv.br',
+    category: 'Sistemas/Software',
+    subject: 'Falha de compilação de planilha de liquidação no PJe-Calc',
+    description: 'Ao rodar o cálculo de juros pela Selic na execução do tema 1.100, os índices de 2021 estão divergentes da tabela do CJF.',
+    priority: 'Média',
+    status: 'Pendente',
+    createdAt: '2026-09-26 11:00',
+    updatedAt: '2026-09-26 11:00',
+    assignedTo: 'Carlos Eduardo Siqueira',
+  }
+];
+
+function loadTickets() {
+  try {
+    if (fs.existsSync(TICKETS_FILE)) {
+      const data = fs.readFileSync(TICKETS_FILE, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error('Error loading tickets from file:', err);
+  }
+  // Initialize with seed
+  try {
+    fs.writeFileSync(TICKETS_FILE, JSON.stringify(SEED_TICKETS, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Error initializing tickets file:', err);
+  }
+  return SEED_TICKETS;
+}
+
+function saveTickets(tickets: any[]) {
+  try {
+    fs.writeFileSync(TICKETS_FILE, JSON.stringify(tickets, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Error saving tickets to file:', err);
+  }
+}
+
+// ---------------------------------------------------------
+// Authentication & Role Helpers
+// ---------------------------------------------------------
+const ADMIN_EMAIL = 'ti@mota.adv.br';
+const ALLOWED_DOMAIN = 'mota.adv.br';
+
+function determineRole(email: string) {
+  const normalized = email.toLowerCase().trim();
+  if (normalized === ADMIN_EMAIL) {
+    return {
+      role: 'ti_admin',
+      roleTitle: 'Gestor de TI & Administrador Geral da Intranet',
+      department: 'Tecnologia da Informação & Operações',
+    };
+  }
+  if (normalized.includes('roberto') || normalized.includes('mota.adv') || normalized.includes('socio')) {
+    return {
+      role: 'partner',
+      roleTitle: 'Sócio Fundador & Coordenador Geral',
+      department: 'Diretoria Executiva',
+    };
+  }
+  if (normalized.includes('beatriz') || normalized.includes('advogado') || normalized.includes('senior')) {
+    return {
+      role: 'senior_attorney',
+      roleTitle: 'Advogado(a) Sênior - Ações Coletivas',
+      department: 'Núcleo de Tribunais Superiores',
+    };
+  }
+  return {
+    role: 'trainee',
+    roleTitle: 'Analista Jurídico / Colaborador',
+    department: 'Pesquisa Jurisprudencial & Prazos',
+  };
+}
+
+// ---------------------------------------------------------
+// Real Google Authentication Verification Endpoint
+// ---------------------------------------------------------
+app.post('/api/auth/google', async (req, res) => {
+  try {
+    const { credential, accessToken } = req.body;
+
+    if (!credential && !accessToken) {
+      return res.status(400).json({ error: 'Nenhum token Google informado.' });
+    }
+
+    let googleData: any = null;
+
+    if (credential) {
+      // Validate Google ID Token via Google's tokeninfo API
+      const tokenInfoUrl = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`;
+      const tokenRes = await fetch(tokenInfoUrl);
+      if (!tokenRes.ok) {
+        const errText = await tokenRes.text();
+        console.error('Google token verification failed:', errText);
+        return res.status(401).json({ error: 'Token de autenticação Google inválido ou expirado.' });
+      }
+      googleData = await tokenRes.json();
+    } else if (accessToken) {
+      // Validate Google Access Token via Google's userinfo API
+      const userinfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!userinfoRes.ok) {
+        return res.status(401).json({ error: 'Token de acesso Google inválido ou expirado.' });
+      }
+      googleData = await userinfoRes.json();
+    }
+
+    const email = (googleData.email || '').toLowerCase().trim();
+    const isEmailVerified = googleData.email_verified === true || googleData.email_verified === 'true';
+    const domain = email.split('@')[1];
+
+    if (!isEmailVerified) {
+      return res.status(403).json({ error: 'O e-mail da sua conta Google não foi verificado.' });
+    }
+
+    // Strict Domain & Admin Enforcement
+    const isAllowed = domain === ALLOWED_DOMAIN || email === ADMIN_EMAIL;
+    if (!isAllowed) {
+      return res.status(403).json({
+        error: `Acesso negado: A conta Google (${email}) não pertence ao domínio corporativo @${ALLOWED_DOMAIN}.`,
+      });
+    }
+
+    const { role, roleTitle, department } = determineRole(email);
+
+    const userProfile = {
+      id: googleData.sub || `google-${Date.now()}`,
+      name: googleData.name || email.split('@')[0],
+      email: email,
+      role: role,
+      roleTitle: roleTitle,
+      avatar: googleData.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+      department: department,
+    };
+
+    res.json({ success: true, user: userProfile });
+  } catch (error: any) {
+    console.error('Auth verification error:', error);
+    res.status(500).json({ error: 'Erro ao verificar credenciais com a Google.' });
+  }
+});
+
+// ---------------------------------------------------------
+// Persistent IT Tickets API
+// ---------------------------------------------------------
+app.get('/api/tickets', (_req, res) => {
+  const tickets = loadTickets();
+  res.json({ tickets });
+});
+
+app.post('/api/tickets', (req, res) => {
+  try {
+    const { requesterName, requesterEmail, category, subject, description, priority } = req.body;
+    
+    if (!requesterEmail || !subject || !description) {
+      return res.status(400).json({ error: 'Campos obrigatórios ausentes para abrir chamado.' });
+    }
+
+    const tickets = loadTickets();
+    const protocolNum = String(tickets.length + 94).padStart(3, '0');
+    const now = new Date();
+    const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const newTicket = {
+      id: `tk-${Date.now()}`,
+      protocol: `MOTA-TI-2026-${protocolNum}`,
+      requesterName: requesterName || requesterEmail.split('@')[0],
+      requesterEmail: requesterEmail.toLowerCase().trim(),
+      category: category || 'Geral',
+      subject: subject.trim(),
+      description: description.trim(),
+      priority: priority || 'Normal',
+      status: 'Novo',
+      createdAt: formattedDate,
+      updatedAt: formattedDate,
+      assignedTo: 'Carlos Eduardo Siqueira',
+    };
+
+    tickets.unshift(newTicket);
+    saveTickets(tickets);
+
+    res.status(201).json({ success: true, ticket: newTicket });
+  } catch (error: any) {
+    console.error('Error creating ticket:', error);
+    res.status(500).json({ error: 'Erro ao registrar chamado de TI.' });
+  }
+});
+
+app.patch('/api/tickets/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, solutionNotes, assignedTo, userEmail } = req.body;
+
+    // Security Guard: Only ti@mota.adv.br can change ticket status
+    if (userEmail && userEmail.toLowerCase() !== ADMIN_EMAIL) {
+      return res.status(403).json({ error: 'Apenas ti@mota.adv.br tem permissão para alterar o status do chamado.' });
+    }
+
+    const tickets = loadTickets();
+    const index = tickets.findIndex((t: any) => t.id === id);
+    if (index === -1) {
+      return res.status(404).json({ error: 'Chamado não encontrado.' });
+    }
+
+    const now = new Date();
+    const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const currentTicket = tickets[index];
+    tickets[index] = {
+      ...currentTicket,
+      ...(status ? { status } : {}),
+      ...(solutionNotes !== undefined ? { solutionNotes } : {}),
+      ...(assignedTo ? { assignedTo } : {}),
+      updatedAt: formattedDate,
+    };
+
+    saveTickets(tickets);
+
+    res.json({ success: true, ticket: tickets[index] });
+  } catch (error: any) {
+    console.error('Error updating ticket:', error);
+    res.status(500).json({ error: 'Erro ao atualizar chamado.' });
+  }
+});
 
 // Initialize Gemini Client
 const apiKey = process.env.GEMINI_API_KEY || '';
